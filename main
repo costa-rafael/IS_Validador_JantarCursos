@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Validador de Bilhetes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+  <style>
+    :root {
+      --bg: #080a0f;
+      --panel: #121722;
+      --panel-soft: #171d2b;
+      --gold: #c8a84b;
+      --gold-soft: #e0c77d;
+      --ok: #2fc27e;
+      --warn: #f0b429;
+      --bad: #ef6b73;
+      --muted: #98a1b3;
+      --text: #e9edf5;
+      --line: #2a3347;
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at top, #101525 0%, var(--bg) 45%);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 18px 12px 24px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 500px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)), var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+      animation: fadeUp .45s ease both;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    h1 {
+      margin: 0;
+      font-family: 'Playfair Display', serif;
+      color: var(--gold-soft);
+      font-size: 1.8rem;
+      letter-spacing: 0.2px;
+    }
+
+    .sub { color: var(--muted); font-size: .92rem; margin-top: 2px; }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: .78rem;
+      color: var(--muted);
+      margin-top: 10px;
+    }
+
+    .status-pill.ready { color: var(--ok); border-color: rgba(47,194,126,.4); }
+
+    .counters {
+      display: none;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .counter {
+      text-align: center;
+      background: var(--panel-soft);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 4px;
+    }
+
+    .counter strong { display: block; font-size: 1.25rem; color: var(--gold-soft); }
+    .counter span { color: var(--muted); font-size: .78rem; }
+
+    .upload-zone {
+      border: 1.5px dashed #405072;
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center;
+      background: rgba(200,168,75,.04);
+      transition: all .2s ease;
+      cursor: pointer;
+    }
+
+    .upload-zone.drag { border-color: var(--gold); background: rgba(200,168,75,.10); }
+
+    .upload-zone p { margin: 0; color: var(--muted); font-size: .9rem; }
+
+    .section-title { margin: 0 0 10px; color: var(--gold-soft); font-size: .98rem; font-weight: 700; }
+
+    .input-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      background: #0d1220;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 13px;
+      color: var(--text);
+      font-size: 1rem;
+      letter-spacing: .6px;
+    }
+
+    input[type="text"]:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(200,168,75,.18); }
+
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 12px;
+      padding: 11px 13px;
+      background: var(--panel-soft);
+      color: var(--text);
+      font-weight: 700;
+      cursor: pointer;
+      transition: .2s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+
+    .btn.gold {
+      background: linear-gradient(180deg, #d7b965, #b8963c);
+      color: #1d1503;
+      border-color: rgba(0,0,0,.18);
+    }
+
+    .btn.icon { width: 48px; font-size: 1.1rem; }
+
+    .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+
+    .camera-wrap {
+      display: none;
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: #000;
+    }
+
+    video {
+      width: 100%;
+      display: block;
+      max-height: 340px;
+      object-fit: cover;
+    }
+
+    .scanner-frame {
+      position: absolute;
+      inset: 12% 8%;
+      border: 2px solid rgba(200,168,75,.9);
+      border-radius: 12px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,.35);
+      pointer-events: none;
+    }
+
+    .scanner-line {
+      position: absolute;
+      left: 8%;
+      right: 8%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #f4df9f, transparent);
+      box-shadow: 0 0 16px #f4df9f;
+      animation: scan 2s linear infinite;
+      pointer-events: none;
+    }
+
+    @keyframes scan {
+      0% { top: 12%; }
+      100% { top: 88%; }
+    }
+
+    .camera-controls {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+      background: rgba(8,10,15,.8);
+    }
+
+    .ocr-status { margin-top: 8px; font-size: .86rem; color: var(--muted); }
+
+    .result { display: none; }
+
+    .result.valid { border-color: rgba(47,194,126,.5); }
+    .result.invalid { border-color: rgba(239,107,115,.55); }
+    .result.not-found { border-color: rgba(152,161,179,.5); }
+    .result.error { border-color: rgba(240,180,41,.5); }
+
+    .result h2 { margin: 0 0 10px; font-size: 1.1rem; }
+
+    .details {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .item {
+      background: #0d1220;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px;
+    }
+
+    .item small { display: block; color: var(--muted); font-size: .72rem; }
+    .item strong { font-size: .88rem; word-break: break-word; }
+
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+    .badge {
+      padding: 5px 9px;
+      font-size: .75rem;
+      border-radius: 999px;
+      border: 1px solid;
+      font-weight: 700;
+    }
+
+    .badge.ok { color: var(--ok); border-color: rgba(47,194,126,.55); background: rgba(47,194,126,.12); }
+    .badge.warn { color: var(--warn); border-color: rgba(240,180,41,.55); background: rgba(240,180,41,.13); }
+    .badge.bad { color: var(--bad); border-color: rgba(239,107,115,.6); background: rgba(239,107,115,.13); }
+
+    .toast-wrap {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 16px;
+      width: min(500px, calc(100vw - 24px));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 99;
+      pointer-events: none;
+    }
+
+    .toast {
+      pointer-events: auto;
+      background: #131a29;
+      border: 1px solid var(--line);
+      color: var(--text);
+      border-left: 4px solid var(--gold);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: .86rem;
+      animation: fadeUp .24s ease both;
+    }
+
+    footer { text-align: center; color: var(--muted); font-size: .75rem; padding: 8px 0 0; }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="card">
+      <h1>Validador de Bilhetes</h1>
+      <p class="sub">Jantar de Cursos · validação local em tempo real</p>
+      <span id="dbStatus" class="status-pill">📂 Base de dados não carregada</span>
+    </header>
+
+    <section id="counterBar" class="card counters" aria-live="polite">
+      <div class="counter"><strong id="countTotal">0</strong><span>Total registos</span></div>
+      <div class="counter"><strong id="countIssued">0</strong><span>Bilhetes emitidos</span></div>
+      <div class="counter"><strong id="countValidated">0</strong><span>Já validados</span></div>
+    </section>
+
+    <section class="card">
+      <p class="section-title">1) Carregar Excel</p>
+      <input id="excelInput" type="file" accept=".xlsx,.xls" hidden>
+      <div id="uploadZone" class="upload-zone" role="button" tabindex="0" aria-label="Carregar ficheiro Excel">
+        <p><strong>Toque para escolher</strong> ou arraste ficheiro .xlsx / .xls</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <p class="section-title">2) Verificar Bilhete</p>
+      <div class="input-row">
+        <input id="codeInput" type="text" placeholder="Ex: B-2003-2-NCRZNC" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <button id="openCameraBtn" class="btn icon" type="button" aria-label="Abrir câmara">📷</button>
+      </div>
+      <div class="btn-row">
+        <button id="verifyBtn" class="btn gold" type="button">Verificar Bilhete</button>
+      </div>
+    </section>
+
+    <section id="cameraSection" class="card" style="display:none;">
+      <p class="section-title">3) Leitura por Câmara (OCR)</p>
+      <div class="camera-wrap" id="cameraWrap">
+        <video id="cameraVideo" playsinline muted></video>
+        <div class="scanner-frame"></div>
+        <div class="scanner-line"></div>
+        <div class="camera-controls">
+          <button id="captureBtn" class="btn gold" type="button">Capturar e Ler Código</button>
+          <button id="closeCameraBtn" class="btn" type="button">Fechar Câmara</button>
+        </div>
+      </div>
+      <div id="ocrStatus" class="ocr-status">OCR inactivo.</div>
+      <canvas id="captureCanvas" hidden></canvas>
+    </section>
+
+    <section id="resultCard" class="card result" aria-live="polite"></section>
+
+    <footer>Processamento local no browser · Sem envio de dados para servidores</footer>
+  </main>
+
+  <div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
+
+  <script>
+    const expectedColumns = [
+      'Nome', 'Número de Telemóvel', 'Email', 'Curso', 'Ano', 'Pratos',
+      'Método de Pagamento', 'Hora', 'Pagamento', 'Confirmado por',
+      'Pagamento', 'Confirmado', 'Bilhete', 'Validado em'
+    ];
+
+    const state = {
+      rows: [],
+      ticketMap: new Map(),
+      dbLoaded: false,
+      stream: null,
+      ocrBusy: false,
+      workerReady: false
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    const excelInput = $('excelInput');
+    const uploadZone = $('uploadZone');
+    const codeInput = $('codeInput');
+    const verifyBtn = $('verifyBtn');
+    const resultCard = $('resultCard');
+    const dbStatus = $('dbStatus');
+    const counterBar = $('counterBar');
+    const countTotal = $('countTotal');
+    const countIssued = $('countIssued');
+    const countValidated = $('countValidated');
+    const openCameraBtn = $('openCameraBtn');
+    const closeCameraBtn = $('closeCameraBtn');
+    const cameraSection = $('cameraSection');
+    const cameraWrap = $('cameraWrap');
+    const cameraVideo = $('cameraVideo');
+    const captureBtn = $('captureBtn');
+    const captureCanvas = $('captureCanvas');
+    const ocrStatus = $('ocrStatus');
+    const toastWrap = $('toastWrap');
+
+    function normalizeCode(s) {
+      return String(s || '').trim().toUpperCase().replace(/\s+/g, '');
+    }
+
+    function extractCode(text) {
+      const m = text.match(/B[-–—](\d{2,6})[-–—](\d+)[-–—]([A-Z0-9]{4,10})/i);
+      if (m) return m[0].toUpperCase().replace(/[–—]/g, '-');
+      const m2 = text.match(/B\s*[-–—\s]\s*(\d{2,6})\s*[-–—\s]\s*(\d+)\s*[-–—\s]\s*([A-Z0-9]{4,10})/i);
+      if (m2) return `B-${m2[1]}-${m2[2]}-${m2[3]}`.toUpperCase();
+      return null;
+    }
+
+    function showToast(message, kind = 'info') {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      if (kind === 'error') toast.style.borderLeftColor = 'var(--bad)';
+      if (kind === 'success') toast.style.borderLeftColor = 'var(--ok)';
+      toast.textContent = message;
+      toastWrap.appendChild(toast);
+      setTimeout(() => toast.remove(), 3600);
+    }
+
+    function trimHeaders(row) {
+      const out = {};
+      Object.keys(row || {}).forEach((key) => {
+        out[String(key).trim()] = row[key];
+      });
+      return out;
+    }
+
+    function updateCounters() {
+      const total = state.rows.length;
+      const issued = state.rows.filter((row) => normalizeCode(row['Bilhete']) !== '').length;
+      const validated = state.rows.filter((row) => normalizeCode(row['Validado em'] || '') !== '').length;
+
+      countTotal.textContent = total;
+      countIssued.textContent = issued;
+      countValidated.textContent = validated;
+      counterBar.style.display = 'grid';
+    }
+
+    function setDbLoaded(loaded, filename = '') {
+      state.dbLoaded = loaded;
+      if (loaded) {
+        dbStatus.classList.add('ready');
+        dbStatus.textContent = `✅ Base de dados carregada${filename ? ` · ${filename}` : ''}`;
+      } else {
+        dbStatus.classList.remove('ready');
+        dbStatus.textContent = '📂 Base de dados não carregada';
+      }
+    }
+
+    function paymentOk(row) {
+      const text = normalizeCode(`${row['Pagamento'] ?? ''} ${row['Confirmado'] ?? ''}`);
+      return ['SIM', 'PAGO', 'OK', 'TRUE', 'CONFIRMADO', 'YES'].some((flag) => text.includes(flag));
+    }
+
+    function displayResult(type, data = {}) {
+      resultCard.style.display = 'block';
+      resultCard.className = `card result ${type}`;
+
+      if (type === 'error') {
+        resultCard.innerHTML = '<h2>📂 Erro</h2><p>Base de dados ainda não carregada. Carregue o ficheiro Excel primeiro.</p>';
+        return;
+      }
+
+      if (type === 'not-found') {
+        resultCard.innerHTML = `<h2>🔎 Não encontrado</h2><p>O código <strong>${data.code || '-'}</strong> não existe na base de dados.</p>`;
+        return;
+      }
+
+      if (type === 'invalid') {
+        resultCard.innerHTML = `<h2>⛔ Inválido</h2><p>Foi encontrado um registo, mas não tem bilhete emitido.</p>`;
+        return;
+      }
+
+      const row = data.row;
+      const paid = paymentOk(row);
+      const alreadyValidated = normalizeCode(row['Validado em'] || '') !== '';
+
+      resultCard.innerHTML = `
+        <h2>✅ Válido</h2>
+        <p>Bilhete <strong>${row['Bilhete'] || '-'}</strong> encontrado com sucesso.</p>
+        <div class="badges">
+          <span class="badge ${paid ? 'ok' : 'warn'}">${paid ? 'Pagamento OK' : 'Verificar Pagamento'}</span>
+          ${alreadyValidated ? '<span class="badge bad">Já validado anteriormente</span>' : '<span class="badge ok">Ainda não validado</span>'}
+        </div>
+        <div class="details">
+          <div class="item"><small>Nome</small><strong>${row['Nome'] || '-'}</strong></div>
+          <div class="item"><small>Curso / Ano</small><strong>${row['Curso'] || '-'} · ${row['Ano'] || '-'}</strong></div>
+          <div class="item"><small>Pratos</small><strong>${row['Pratos'] || '-'}</strong></div>
+          <div class="item"><small>Email</small><strong>${row['Email'] || '-'}</strong></div>
+          <div class="item"><small>Telemóvel</small><strong>${row['Número de Telemóvel'] || '-'}</strong></div>
+          <div class="item"><small>Método de Pagamento</small><strong>${row['Método de Pagamento'] || '-'}</strong></div>
+          <div class="item"><small>Hora</small><strong>${row['Hora'] || '-'}</strong></div>
+          <div class="item"><small>Validado em</small><strong>${row['Validado em'] || '—'}</strong></div>
+        </div>
+      `;
+    }
+
+    function verifyCode(rawCode) {
+      const code = normalizeCode(rawCode);
+
+      if (!state.dbLoaded) {
+        displayResult('error');
+        showToast('Carregue primeiro a base de dados Excel.', 'error');
+        return;
+      }
+
+      if (!code) {
+        showToast('Introduza um código de bilhete.', 'error');
+        return;
+      }
+
+      const row = state.ticketMap.get(code);
+
+      if (!row) {
+        displayResult('not-found', { code });
+        showToast('Bilhete não encontrado.', 'error');
+        return;
+      }
+
+      const isIssued = normalizeCode(row['Bilhete']) !== '';
+      if (!isIssued) {
+        displayResult('invalid', { row });
+        showToast('Registo sem bilhete emitido.', 'error');
+        return;
+      }
+
+      displayResult('valid', { row });
+      showToast('Bilhete válido.', 'success');
+    }
+
+    async function loadExcelFile(file) {
+      if (!file) return;
+      const extOk = /\.(xlsx|xls)$/i.test(file.name);
+      if (!extOk) {
+        showToast('Formato inválido. Use .xlsx ou .xls', 'error');
+        return;
+      }
+
+      try {
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data, { type: 'array' });
+        const firstSheetName = wb.SheetNames[0];
+        if (!firstSheetName) throw new Error('Ficheiro sem folhas.');
+
+        const ws = wb.Sheets[firstSheetName];
+        const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        const rows = json.map(trimHeaders);
+
+        state.rows = rows;
+        state.ticketMap = new Map();
+
+        rows.forEach((row) => {
+          const ticket = normalizeCode(row['Bilhete']);
+          if (ticket) state.ticketMap.set(ticket, row);
+        });
+
+        const availableCols = new Set(Object.keys(rows[0] || {}).map((x) => String(x).trim()));
+        const missing = expectedColumns.filter((col) => !availableCols.has(col));
+        if (missing.length) {
+          showToast(`Aviso: faltam colunas esperadas (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? ', ...' : ''}).`, 'error');
+        }
+
+        setDbLoaded(true, file.name);
+        updateCounters();
+        showToast(`Ficheiro carregado: ${rows.length} registos.`, 'success');
+      } catch (err) {
+        console.error(err);
+        setDbLoaded(false);
+        state.rows = [];
+        state.ticketMap = new Map();
+        counterBar.style.display = 'none';
+        showToast(`Erro ao ler Excel: ${err.message || err}`, 'error');
+      }
+    }
+
+    async function openCamera() {
+      try {
+        if (state.stream) return;
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+
+        state.stream = stream;
+        cameraVideo.srcObject = stream;
+        await cameraVideo.play();
+        cameraSection.style.display = 'block';
+        cameraWrap.style.display = 'block';
+        ocrStatus.textContent = 'Câmara activa. Posicione o código dentro da moldura.';
+      } catch (err) {
+        console.error(err);
+        showToast('Não foi possível abrir a câmara.', 'error');
+      }
+    }
+
+    function closeCamera() {
+      if (state.stream) {
+        state.stream.getTracks().forEach((track) => track.stop());
+      }
+      state.stream = null;
+      cameraVideo.srcObject = null;
+      cameraWrap.style.display = 'none';
+      cameraSection.style.display = 'none';
+      ocrStatus.textContent = 'OCR inactivo.';
+    }
+
+    async function runOCRFromFrame() {
+      if (state.ocrBusy) return;
+      if (!state.stream || !cameraVideo.videoWidth) {
+        showToast('Abra a câmara antes de capturar.', 'error');
+        return;
+      }
+
+      state.ocrBusy = true;
+      captureBtn.disabled = true;
+      captureBtn.textContent = 'A processar...';
+
+      try {
+        const ctx = captureCanvas.getContext('2d');
+        captureCanvas.width = cameraVideo.videoWidth;
+        captureCanvas.height = cameraVideo.videoHeight;
+        ctx.drawImage(cameraVideo, 0, 0, captureCanvas.width, captureCanvas.height);
+
+        ocrStatus.textContent = 'OCR: 0%';
+
+        const result = await Tesseract.recognize(captureCanvas, 'eng', {
+          logger: (m) => {
+            if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+              ocrStatus.textContent = `OCR: ${Math.round(m.progress * 100)}%`;
+            }
+          }
+        });
+
+        const text = String(result?.data?.text || '');
+        const foundCode = extractCode(text);
+
+        if (foundCode) {
+          codeInput.value = foundCode;
+          ocrStatus.textContent = `Código detectado: ${foundCode}`;
+          showToast(`Código lido: ${foundCode}`, 'success');
+          verifyCode(foundCode);
+        } else {
+          ocrStatus.textContent = `Não foi possível extrair automaticamente. Texto OCR: ${text.replace(/\s+/g, ' ').trim().slice(0, 220) || '(vazio)'}`;
+          showToast('OCR sem código reconhecido. Corrija manualmente.', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        ocrStatus.textContent = 'Erro no OCR.';
+        showToast(`Erro OCR: ${err.message || err}`, 'error');
+      } finally {
+        state.ocrBusy = false;
+        captureBtn.disabled = false;
+        captureBtn.textContent = 'Capturar e Ler Código';
+      }
+    }
+
+    function initUploadHandlers() {
+      uploadZone.addEventListener('click', () => excelInput.click());
+      uploadZone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          excelInput.click();
+        }
+      });
+
+      excelInput.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        loadExcelFile(file);
+      });
+
+      ['dragenter', 'dragover'].forEach((eventName) => {
+        uploadZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          uploadZone.classList.add('drag');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach((eventName) => {
+        uploadZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          uploadZone.classList.remove('drag');
+        });
+      });
+
+      uploadZone.addEventListener('drop', (e) => {
+        const file = e.dataTransfer?.files?.[0];
+        loadExcelFile(file);
+      });
+    }
+
+    function initActions() {
+      codeInput.addEventListener('input', () => {
+        codeInput.value = codeInput.value.toUpperCase();
+      });
+
+      codeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          verifyCode(codeInput.value);
+        }
+      });
+
+      verifyBtn.addEventListener('click', () => verifyCode(codeInput.value));
+      openCameraBtn.addEventListener('click', openCamera);
+      closeCameraBtn.addEventListener('click', closeCamera);
+      captureBtn.addEventListener('click', runOCRFromFrame);
+    }
+
+    initUploadHandlers();
+    initActions();
+  </script>
+</body>
+</html>
