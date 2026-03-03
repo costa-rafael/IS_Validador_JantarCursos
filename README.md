@@ -2,7 +2,7 @@
 
 Aplicação web (single-file) para validar bilhetes de um jantar académico com base numa folha Excel, incluindo suporte a OCR via câmara para leitura automática do código.
 
-## Funcionalidades
+## Funcionalidades ejhej
 
 - Carregamento de ficheiros Excel (`.xlsx` e `.xls`).
 - Mapeamento dos bilhetes para validação rápida.
