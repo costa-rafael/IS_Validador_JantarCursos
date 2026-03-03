@@ -41,10 +41,26 @@
     body {
       min-height: 100dvh;
       font-family: 'Syne', sans-serif;
-      background: var(--bg);
+      background:
+        radial-gradient(circle at 8% 10%, rgba(201,168,76,0.14), transparent 36%),
+        radial-gradient(circle at 92% 0%, rgba(52,211,153,0.1), transparent 38%),
+        var(--bg);
       color: var(--text);
       overflow-x: hidden;
     }
+
+    .bg-glow {
+      position: fixed;
+      width: 240px;
+      height: 240px;
+      border-radius: 999px;
+      filter: blur(70px);
+      pointer-events: none;
+      z-index: -1;
+      opacity: .45;
+    }
+    .bg-glow.gold { background: rgba(201,168,76,.22); top: 120px; left: -80px; }
+    .bg-glow.teal { background: rgba(52,211,153,.2); top: 380px; right: -110px; }
 
     /* ─── SCANNER OVERLAY ─── */
     #scanOverlay {
@@ -187,6 +203,7 @@
       min-height: 100dvh;
       max-width: 480px;
       margin: 0 auto;
+      position: relative;
       padding-bottom: calc(20px + var(--safe-b));
     }
 
@@ -200,6 +217,35 @@
 
     .brand-event { font-size:0.58rem; font-weight:700; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); opacity:.8; display:block; }
     .brand-name  { font-family:'Cormorant Garamond',serif; font-size:1.5rem; font-weight:600; color:var(--gold-l); line-height:1.05; }
+
+    .hero-panel {
+      margin: 0 18px 10px;
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: var(--r);
+      background:
+        linear-gradient(170deg, rgba(201,168,76,.16), rgba(201,168,76,.03) 44%),
+        linear-gradient(180deg, rgba(255,255,255,.03), transparent 70%);
+      padding: 13px 14px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .hero-label { font-size: .62rem; color: var(--gold-l); text-transform: uppercase; letter-spacing: .14em; }
+    .hero-title { margin-top: 4px; font-size: .82rem; color: var(--text); }
+    .hero-pill {
+      border-radius: 999px;
+      border: 1px solid rgba(52,211,153,.32);
+      background: rgba(52,211,153,.14);
+      color: var(--green);
+      padding: 6px 10px;
+      font-size: .62rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
 
     .db-pill {
       display: flex; align-items: center; gap: 5px;
@@ -228,11 +274,12 @@
     }
 
     .ctr {
-      background: var(--s1);
+      background: linear-gradient(180deg, rgba(255,255,255,.02), transparent 70%), var(--s1);
       border: 1px solid var(--border);
       border-radius: var(--r-sm);
       padding: 10px 6px;
       text-align: center;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
     }
     .ctr strong { display:block; font-family:'Cormorant Garamond',serif; font-size:1.65rem; font-weight:600; color:var(--gold-l); line-height:1; }
     .ctr span   { display:block; margin-top:3px; font-size:0.58rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
@@ -307,6 +354,7 @@
 
     /* Result card */
     #resultCard { display:none; margin:12px 18px 0; background:var(--s1); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
+    #resultCard { animation: cardIn .2s cubic-bezier(.16,1,.3,1); }
     #resultCard.valid      { border-color:rgba(52,211,153,.3); }
     #resultCard.invalid    { border-color:rgba(248,113,113,.3); }
     #resultCard.not-found  { border-color:rgba(107,122,150,.2); }
@@ -337,6 +385,11 @@
     .di small { display:block; font-size:.58rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
     .di strong { font-size:.8rem; font-weight:500; color:var(--text); line-height:1.35; word-break:break-word; }
 
+    @keyframes cardIn {
+      from { opacity:0; transform: translateY(8px) scale(.99); }
+      to { opacity:1; transform: none; }
+    }
+
     /* Toasts */
     .toast-wrap {
       position:fixed; top:calc(12px + var(--safe-t));
@@ -362,6 +415,9 @@
   </style>
 </head>
 <body>
+
+  <div class="bg-glow gold" aria-hidden="true"></div>
+  <div class="bg-glow teal" aria-hidden="true"></div>
 
   <!-- ── SCANNER OVERLAY (fullscreen) ── -->
   <div id="scanOverlay">
@@ -408,6 +464,14 @@
         <span class="db-dot"></span>
         <span id="dbLabel">Sem BD</span>
       </button>
+    </div>
+
+    <div class="hero-panel">
+      <div>
+        <div class="hero-label">Check-in rápido</div>
+        <div class="hero-title">Validação manual ou por câmara</div>
+      </div>
+      <div class="hero-pill">Modo evento</div>
     </div>
 
     <div id="counterBar" class="counters" aria-live="polite">
