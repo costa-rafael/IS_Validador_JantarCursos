@@ -1,83 +1,82 @@
 # IS Validador · Jantar de Cursos
 
-Aplicação web estática para **validar bilhetes de jantar académico** a partir de um ficheiro Excel, com suporte a leitura manual e leitura automática por câmara (OCR).
+Validador de bilhetes com leitura QR, suporte a Excel local/online e integração com **Cloudflare Worker + R2**.
 
-## Descrição
+## Funcionalidades
 
-O projeto foi pensado para uso rápido em contexto de check-in:
+- Validação de bilhetes por código e por QR (BarcodeDetector/jsQR).
+- Fonte de dados por:
+  - ficheiro local `.xlsx/.xls`;
+  - URL pública;
+  - endpoint Worker (`/api/r2-db`) ligado a R2.
+- Normalização robusta de colunas/encoding (mojibake, aliases, datas/horas em serial Excel).
+- Registo de `Validado em` + `Validador` e listagem de validados/por validar.
+- Fluxo inicial para identificar nome do validador (acesso pode ficar protegido por Cloudflare Zero Trust).
 
-- carrega uma lista de participantes a partir de `.xlsx` / `.xls`;
-- valida bilhetes por código;
-- permite leitura automática do código via câmara com Tesseract;
-- mostra estado do registo (emitido, validado, pagamento e dados do participante);
-- processa os dados no browser, sem backend dedicado.
+## Estrutura
 
-## Funcionalidades principais
+- `docs/index.html` — frontend completo.
+- `src/worker.js` — Worker com endpoint `/api/r2-db` para ler Excel de R2.
+- `wrangler.jsonc` — config do Worker, assets e binding R2.
 
-- Upload de folha Excel com os registos do evento.
-- Pesquisa/validação manual de bilhetes.
-- Scanner com câmara para OCR de códigos.
-- Indicadores resumidos de estado dos bilhetes.
-- Interface mobile-first.
+## Configuração Cloudflare (R2)
 
-## Estrutura do repositório
+No `wrangler.jsonc`:
 
-- `docs/index.html` — aplicação principal (HTML + CSS + JS).
-- `new_styles.css` — estilos adicionais/exportados.
-- `apply_styles.js` — script utilitário para aplicar estilos.
-- `apply_styles.py` — utilitário auxiliar para manipulação de estilos.
+- `main: "src/worker.js"`
+- `r2_buckets[].binding: "DB_BUCKET"`
+- `vars.R2_DEFAULT_KEY` — chave default do Excel no bucket
 
-## Requisitos
+Exemplo atual:
 
-- Browser moderno com JavaScript ativo.
-- Permissão de câmara (opcional, apenas para OCR).
-- Ligação à internet para CDNs usadas no front-end:
-  - `xlsx`;
-  - `tesseract.js`;
-  - Google Fonts.
+```jsonc
+"r2_buckets": [
+  {
+    "binding": "DB_BUCKET",
+    "bucket_name": "jantarcursos-2026-02"
+  }
+],
+"vars": {
+  "R2_DEFAULT_KEY": "Bilhetes.xlsx"
+}
+```
 
-## Como executar localmente
+## Endpoint Worker
 
-Pode abrir diretamente o ficheiro `docs/index.html` no browser.
+- `GET /api/r2-db` → carrega o ficheiro definido em `R2_DEFAULT_KEY`
+- `GET /api/r2-db?key=outro.xlsx` → carrega uma chave específica do bucket
+- `GET /api/r2-validations?key=...` → devolve validações persistidas em R2
+- `POST /api/r2-validations` → grava/atualiza validação (`bilhete`, `validadoEm`, `validador`)
 
-Para evitar limitações de alguns browsers com câmara, recomenda-se servir por HTTP local:
+Se o ficheiro existir, responde o binário Excel com header `x-r2-key`.
+
+## Uso na UI
+
+Na folha “Fonte de dados”, usar:
+
+- **Integração R2 (Worker)**
+  - campo de chave (ex: `Bilhetes.xlsx`)
+  - botão “Carregar de R2”
+
+Também suporta autoload por query string:
+
+- `?db=https://.../ficheiro.xlsx`
+- `?r2key=Bilhetes.xlsx`
+
+## Executar localmente
 
 ```bash
 python3 -m http.server 8080
 ```
 
-Depois, aceda a:
+Abrir:
 
 ```text
 http://localhost:8080/docs/index.html
 ```
 
-## Fluxo de utilização
+## Nota
 
-1. Abrir a app e carregar o Excel do evento.
-2. Verificar bilhete manualmente pelo código **ou** abrir a câmara.
-3. Confirmar o resultado apresentado (encontrado, válido, já validado, etc.).
+O acesso à app em produção pode ser protegido por **Cloudflare Zero Trust Access**; o passo local de nome do validador serve para auditoria operacional dentro da app.
 
-## Colunas esperadas no Excel
-
-As validações funcionam melhor quando o ficheiro inclui colunas como:
-
-- `Nome`
-- `Número de Telemóvel`
-- `Email`
-- `Curso`
-- `Ano`
-- `Pratos`
-- `Método de Pagamento`
-- `Hora`
-- `Pagamento`
-- `Confirmado por`
-- `Confirmado`
-- `Bilhete`
-- `Validado em`
-
-> A aplicação pode funcionar com variações, mas poderá mostrar alertas para colunas em falta.
-
-## Licença
-
-Sem licença definida neste repositório.
+Quando a fonte é R2/Worker, ao validar um bilhete a app persiste essa validação em R2 (objeto JSON de validações) e reaplica esses dados em carregamentos seguintes.
