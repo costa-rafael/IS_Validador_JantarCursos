@@ -764,7 +764,9 @@
       scanRaf: null,
       validationSeq: 0,
       authenticated: false,
-      validatorName: ''
+      validatorName: '',
+      r2Key: '',
+      sourceType: ''
     };
 
     const $ = id => document.getElementById(id);
@@ -953,6 +955,8 @@
     function setDb(ok, label = '', source = null) {
       state.loaded = ok;
       state.source = ok ? source : null;
+      state.sourceType = ok ? String(source || '') : '';
+      if (!ok || state.sourceType !== 'r2') state.r2Key = '';
       dbBtn.className = `source-pill${ok ? ' ready' : ''}`;
       dbLabel.textContent = ok ? label : 'Sem BD';
     }
@@ -1049,9 +1053,11 @@
       ensureValidationOrder();
       setDb(true, sourceLabel, sourceType);
       updateCounters();
-      toast(`${rows.length} registos carregados (${sourceType === 'online' ? 'online' : 'local'}).`, 'success');
+      const sourceLabelText = sourceType === 'r2' ? 'r2' : (sourceType === 'online' ? 'online' : 'local');
+      toast(`${rows.length} registos carregados (${sourceLabelText}).`, 'success');
       localStorage.setItem('dbSourceType', sourceType);
       if (sourceType === 'online') localStorage.setItem('dbOnlineUrl', onlineUrlInput.value.trim());
+      if (sourceType === 'r2') localStorage.setItem('dbR2Key', r2KeyInput.value.trim());
       closeSheet();
     }
 
@@ -1125,13 +1131,72 @@
         const data = await res.arrayBuffer();
         const keyHeader = res.headers.get('x-r2-key') || cleanKey || 'R2';
         if (keyHeader) r2KeyInput.value = keyHeader;
-        await loadExcelArrayBuffer(data, `R2:${String(keyHeader).slice(0, 20)}`, 'online');
+        state.r2Key = String(keyHeader || cleanKey || '').trim();
+
+        await loadExcelArrayBuffer(data, `R2:${String(keyHeader).slice(0, 20)}`, 'r2');
+        await applyR2PersistedValidations();
       } catch (err) {
         console.error(err);
         toast(`Erro ao carregar de R2/Worker: ${err.message || err}`, 'error');
       } finally {
         loadR2Btn.disabled = false;
         loadR2Btn.innerHTML = '<i class="bi bi-hdd-network"></i> Carregar de R2';
+      }
+    }
+
+    async function applyR2PersistedValidations() {
+      if (!state.r2Key) return;
+
+      try {
+        const res = await fetch(`/api/r2-validations?key=${encodeURIComponent(state.r2Key)}`, { method: 'GET' });
+        if (!res.ok) return;
+        const payload = await res.json();
+        const items = Array.isArray(payload?.items) ? payload.items : [];
+        if (!items.length) return;
+
+        items.forEach(item => {
+          const row = state.map.get(norm(item?.bilhete || ''));
+          if (!row) return;
+          if (item?.validadoEm && !norm(row['Validado em'])) row['Validado em'] = item.validadoEm;
+          if (item?.validador && !norm(row['Validador'])) row['Validador'] = item.validador;
+        });
+
+        ensureValidationOrder();
+        updateCounters();
+        toast(`Validações sincronizadas do R2: ${items.length}.`, 'info');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function persistValidationToR2(row) {
+      if (state.sourceType !== 'r2' || !state.r2Key) return;
+
+      try {
+        const payload = {
+          key: state.r2Key,
+          bilhete: row['Bilhete'] || '',
+          validadoEm: row['Validado em'] || '',
+          validador: row['Validador'] || ''
+        };
+
+        const res = await fetch('/api/r2-validations', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          let detail = '';
+          try {
+            const errJson = await res.json();
+            detail = errJson?.error ? ` · ${errJson.error}` : '';
+          } catch {}
+          throw new Error(`HTTP ${res.status}${detail}`);
+        }
+      } catch (err) {
+        console.error(err);
+        toast(`Validação local OK, mas falhou gravação no R2: ${err.message || err}`, 'error');
       }
     }
 
@@ -1196,7 +1261,7 @@
         </div>`;
     }
 
-    function verify(raw) {
+    async function verify(raw) {
       if (!requireAuthAction()) return;
       const code = norm(raw);
       if (!state.loaded) {
@@ -1237,6 +1302,7 @@
       }
 
       showResult('valid', { row });
+      if (!alreadyValidated) await persistValidationToR2(row);
       toast(alreadyValidated ? 'Bilhete já tinha sido validado.' : 'Bilhete válido e marcado como validado.', 'success');
     }
 
@@ -1453,7 +1519,7 @@
       const savedValidator = localStorage.getItem('validatorName') || '';
       if (savedValidator) validatorNameInput.value = savedValidator;
 
-      const urlR2Key = url.searchParams.get('r2key') || '';
+      const urlR2Key = url.searchParams.get('r2key') || localStorage.getItem('dbR2Key') || '';
       if (urlR2Key) r2KeyInput.value = urlR2Key;
 
       if (queryDb) {

@@ -45,6 +45,8 @@ Exemplo atual:
 
 - `GET /api/r2-db` → carrega o ficheiro definido em `R2_DEFAULT_KEY`
 - `GET /api/r2-db?key=outro.xlsx` → carrega uma chave específica do bucket
+- `GET /api/r2-validations?key=...` → devolve validações persistidas em R2
+- `POST /api/r2-validations` → grava/atualiza validação (`bilhete`, `validadoEm`, `validador`)
 
 Se o ficheiro existir, responde o binário Excel com header `x-r2-key`.
 
@@ -63,16 +65,16 @@ Também suporta autoload por query string:
 
 ## Executar localmente
 
-```bash
-python3 -m http.server 8080
-```
+## Uso na UI
 
 Abrir:
 
-```text
-http://localhost:8080/docs/index.html
-```
+- **Integração R2 (Worker)**
+  - campo de chave (ex: `Bilhetes.xlsx`)
+  - botão “Carregar de R2”
 
 ## Nota
 
 O acesso à app em produção pode ser protegido por **Cloudflare Zero Trust Access**; o passo local de nome do validador serve para auditoria operacional dentro da app.
+
+Quando a fonte é R2/Worker, ao validar um bilhete a app persiste essa validação em R2 (objeto JSON de validações) e reaplica esses dados em carregamentos seguintes.
