@@ -627,6 +627,17 @@
             <i class="bi bi-cloud-download"></i> Carregar URL
           </button>
         </div>
+
+        <div class="src-card">
+          <h4><i class="bi bi-database-fill-gear"></i> Integração R2 (Worker)</h4>
+          <p>Lê o Excel diretamente do teu Worker via <code>/api/r2-db</code>.</p>
+          <div class="input-wrap" style="margin-top:10px;">
+            <input id="r2KeyInput" type="text" placeholder="Bilhetes.xlsx" autocomplete="off">
+          </div>
+          <button id="loadR2Btn" class="btn" style="width:100%; margin-top:8px;" type="button">
+            <i class="bi bi-hdd-network"></i> Carregar de R2
+          </button>
+        </div>
       </div>
 
       <div class="sheet-actions">
@@ -776,6 +787,8 @@
     const dropZone = $('dropZone');
     const onlineUrlInput = $('onlineUrlInput');
     const loadUrlBtn = $('loadUrlBtn');
+    const r2KeyInput = $('r2KeyInput');
+    const loadR2Btn = $('loadR2Btn');
     const closeSheetBtn = $('closeSheetBtn');
     const openValidatedListBtn = $('openValidatedListBtn');
     const closeValidationSheetBtn = $('closeValidationSheetBtn');
@@ -1091,6 +1104,37 @@
       }
     }
 
+    async function loadExcelFromR2Worker(key) {
+      const cleanKey = String(key || '').trim();
+      const endpoint = cleanKey ? `/api/r2-db?key=${encodeURIComponent(cleanKey)}` : '/api/r2-db';
+
+      try {
+        loadR2Btn.disabled = true;
+        loadR2Btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> A carregar…';
+
+        const res = await fetch(endpoint, { method: 'GET' });
+        if (!res.ok) {
+          let detail = '';
+          try {
+            const errJson = await res.json();
+            detail = errJson?.error ? ` · ${errJson.error}` : '';
+          } catch {}
+          throw new Error(`HTTP ${res.status}${detail}`);
+        }
+
+        const data = await res.arrayBuffer();
+        const keyHeader = res.headers.get('x-r2-key') || cleanKey || 'R2';
+        if (keyHeader) r2KeyInput.value = keyHeader;
+        await loadExcelArrayBuffer(data, `R2:${String(keyHeader).slice(0, 20)}`, 'online');
+      } catch (err) {
+        console.error(err);
+        toast(`Erro ao carregar de R2/Worker: ${err.message || err}`, 'error');
+      } finally {
+        loadR2Btn.disabled = false;
+        loadR2Btn.innerHTML = '<i class="bi bi-hdd-network"></i> Carregar de R2';
+      }
+    }
+
     function payOk(row) {
       const t = norm(`${row['Pagamento Confirmado'] || ''} ${row['Pagamento'] || ''} ${row['Confirmado'] || ''}`);
       return ['SIM','PAGO','OK','TRUE','CONFIRMADO','YES'].some(f => t.includes(f));
@@ -1353,6 +1397,7 @@
     dropZone.addEventListener('drop', e => loadExcelFile(e.dataTransfer?.files?.[0]));
 
     loadUrlBtn.addEventListener('click', () => loadExcelUrl(onlineUrlInput.value));
+    loadR2Btn.addEventListener('click', () => loadExcelFromR2Worker(r2KeyInput.value));
     onlineUrlInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -1408,10 +1453,15 @@
       const savedValidator = localStorage.getItem('validatorName') || '';
       if (savedValidator) validatorNameInput.value = savedValidator;
 
+      const urlR2Key = url.searchParams.get('r2key') || '';
+      if (urlR2Key) r2KeyInput.value = urlR2Key;
+
       if (queryDb) {
         onlineUrlInput.value = queryDb;
         loadExcelUrl(queryDb);
       }
+
+      if (urlR2Key) loadExcelFromR2Worker(urlR2Key);
     })();
   </script>
 </body>
