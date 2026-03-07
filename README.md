@@ -65,15 +65,18 @@ Também suporta autoload por query string:
 
 ## Executar localmente
 
-```bash
-python3 -m http.server 8080
-```
+## Uso na UI
 
 Abrir:
 
-```text
-http://localhost:8080/docs/index.html
-```
+- **Integração R2 (Worker)**
+  - campo de chave (ex: `Bilhetes.xlsx`)
+  - botão “Carregar de R2”
+
+Também suporta autoload por query string:
+
+- `?db=https://.../ficheiro.xlsx`
+- `?r2key=Bilhetes.xlsx`
 
 ## Nota
 
