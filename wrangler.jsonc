@@ -1,12 +1,23 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "validadorcursos",
+  "main": "src/worker.js",
   "compatibility_date": "2025-09-27",
   "observability": {
     "enabled": true
   },
   "assets": {
     "directory": "docs"
+  },
+  "r2_buckets": [
+    {
+      "binding": "DB_BUCKET",
+      "bucket_name": "jantarcursos-2026-02"
+    }
+  ],
+  "vars": {
+    "R2_DEFAULT_KEY": "Bilhetes.xlsx",
+    "R2_VALIDATIONS_SUFFIX": ".validations.json"
   },
   "compatibility_flags": [
     "nodejs_compat"
