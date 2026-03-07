@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;1,500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <style>
     :root {
       --bg: #07090f;
@@ -201,10 +201,43 @@
       display: flex;
       flex-direction: column;
       min-height: 100dvh;
-      max-width: 480px;
+      width: min(100%, 980px);
       margin: 0 auto;
       position: relative;
+      padding-inline: clamp(0px, 2vw, 18px);
       padding-bottom: calc(20px + var(--safe-b));
+    }
+
+    @media (min-width: 700px) {
+      .topbar,
+      .hero-panel,
+      .input-zone,
+      .counters,
+      #resultCard,
+      .ocr-box {
+        margin-inline: auto;
+        width: min(100%, 840px);
+      }
+      .topbar,
+      .counters,
+      .input-zone { padding-inline: 0; }
+      .hero-panel,
+      #resultCard,
+      .ocr-box { margin-top: 12px; }
+      .action-row { grid-template-columns: minmax(180px, 1fr) auto; }
+      .btn { height: 56px; }
+    }
+
+    @media (min-width: 900px) {
+      .brand-name { font-size: 1.9rem; }
+      .hero-label { font-size: .74rem; }
+      .hero-title { font-size: 1rem; }
+      .details { grid-template-columns: repeat(4, 1fr); }
+      .di { min-height: 84px; }
+      .scan-frame {
+        width: min(52vw, 500px);
+        height: min(26vw, 220px);
+      }
     }
 
     /* Top bar */
@@ -427,12 +460,12 @@
         <span></span>
         <div class="scan-line"></div>
       </div>
-      <p class="scan-hint">Aponte para o código do bilhete</p>
+      <p class="scan-hint">Aponte para o QR Code do bilhete</p>
     </div>
     <div class="scan-bottom">
       <div id="scanStatus" class="scan-status-txt">Câmara activa</div>
       <div class="scan-btns">
-        <button id="captureBtn" class="btn primary" type="button">📸 &nbsp;Fotografar e Ler Texto</button>
+        <button id="captureBtn" class="btn primary" type="button">🔍 &nbsp;Ler QR code</button>
         <button id="closeScanBtn" class="btn ghost" type="button">✕</button>
       </div>
     </div>
@@ -492,9 +525,9 @@
       </div>
     </div>
 
-    <!-- Extracted OCR text -->
+    <!-- QR status box -->
     <div id="ocrBox" class="ocr-box">
-      <div class="ocr-lbl">Texto reconhecido pela câmara</div>
+      <div class="ocr-lbl">Último QR detetado</div>
       <div id="ocrTxt" class="ocr-txt"></div>
     </div>
 
@@ -511,7 +544,7 @@
       'Confirmado','Bilhete','Validado em'
     ];
 
-    const state = { rows:[], map:new Map(), loaded:false, stream:null, ocr:false };
+    const state = { rows:[], map:new Map(), loaded:false, stream:null, scanning:false, rafId:null, scanCooldown:false };
     const $ = id => document.getElementById(id);
 
     const scanOverlay  = $('scanOverlay');
@@ -540,10 +573,16 @@
     function norm(s) { return String(s||'').trim().toUpperCase().replace(/\s+/g,''); }
 
     function extractCode(text) {
-      const m = text.match(/B[-–—](\d{2,6})[-–—](\d+)[-–—]([A-Z0-9]{4,10})/i);
+      const source = String(text || '').trim();
+      if (!source) return null;
+
+      const m = source.match(/B[-–—](\d{2,6})[-–—](\d+)[-–—]([A-Z0-9]{4,10})/i);
       if (m) return m[0].toUpperCase().replace(/[–—]/g,'-');
-      const m2 = text.match(/B\s*[-–—\s]\s*(\d{2,6})\s*[-–—\s]\s*(\d+)\s*[-–—\s]\s*([A-Z0-9]{4,10})/i);
+
+      const m2 = source.match(/B\s*[-–—\s]\s*(\d{2,6})\s*[-–—\s]\s*(\d+)\s*[-–—\s]\s*([A-Z0-9]{4,10})/i);
       if (m2) return `B-${m2[1]}-${m2[2]}-${m2[3]}`.toUpperCase();
+
+      if (/^B[-A-Z0-9]{8,}$/i.test(source)) return source.toUpperCase().replace(/[–—]/g, '-');
       return null;
     }
 
@@ -690,7 +729,43 @@
     clearBtn.addEventListener('click', () => { codeInput.value=''; codeInput.focus(); ocrBox.classList.remove('show'); });
     verifyBtn.addEventListener('click', () => verify(codeInput.value));
 
-    /* Scanner */
+    /* Scanner QR */
+    function handleScanValue(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return;
+
+      const code = extractCode(raw) || raw.toUpperCase();
+      ocrTxt.textContent = raw;
+      ocrBox.classList.add('show');
+      codeInput.value = code;
+      closeScanner();
+      toast(`QR detetado: ${code}`, 'success');
+      verify(code);
+    }
+
+    function detectQRCode() {
+      if (!state.scanning || !state.stream || !scanVideo.videoWidth || state.scanCooldown) {
+        if (state.scanning) state.rafId = requestAnimationFrame(detectQRCode);
+        return;
+      }
+
+      const ctx = captureCanvas.getContext('2d', { willReadFrequently: true });
+      captureCanvas.width = scanVideo.videoWidth;
+      captureCanvas.height = scanVideo.videoHeight;
+      ctx.drawImage(scanVideo, 0, 0, captureCanvas.width, captureCanvas.height);
+
+      const imageData = ctx.getImageData(0, 0, captureCanvas.width, captureCanvas.height);
+      const qr = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+
+      if (qr?.data) {
+        state.scanCooldown = true;
+        handleScanValue(qr.data);
+        return;
+      }
+
+      state.rafId = requestAnimationFrame(detectQRCode);
+    }
+
     async function openScanner() {
       try {
         if (state.stream) return;
@@ -699,11 +774,16 @@
           audio:false
         });
         state.stream = stream;
+        state.scanning = true;
+        state.scanCooldown = false;
         scanVideo.srcObject = stream;
         await scanVideo.play();
         scanOverlay.classList.add('active');
-        scanStatus.textContent = 'Câmara activa';
-        scanStatus.className = 'scan-status-txt';
+        scanStatus.textContent = 'À procura de QR code...';
+        scanStatus.className = 'scan-status-txt busy';
+        captureBtn.disabled = false;
+        captureBtn.innerHTML = '🔍 &nbsp;Ler QR code';
+        detectQRCode();
       } catch(err) {
         console.error(err);
         toast('Não foi possível abrir a câmara.','error');
@@ -711,77 +791,35 @@
     }
 
     function closeScanner() {
+      if (state.rafId) cancelAnimationFrame(state.rafId);
+      state.rafId = null;
+      state.scanning = false;
+      state.scanCooldown = false;
       if (state.stream) state.stream.getTracks().forEach(t => t.stop());
       state.stream = null;
       scanVideo.srcObject = null;
       scanOverlay.classList.remove('active');
-      state.ocr = false;
       captureBtn.disabled = false;
-      captureBtn.innerHTML = '📸 &nbsp;Fotografar e Ler Texto';
+      captureBtn.innerHTML = '🔍 &nbsp;Ler QR code';
+      scanStatus.textContent = 'Câmara inactiva';
+      scanStatus.className = 'scan-status-txt';
     }
 
     async function doCapture() {
-      if (state.ocr) return;
-      if (!state.stream || !scanVideo.videoWidth) { toast('Câmara não disponível.','error'); return; }
-
-      state.ocr = true;
-      captureBtn.disabled = true;
-      captureBtn.textContent = 'A processar…';
-      scanStatus.textContent = 'A reconhecer texto…';
-      scanStatus.className = 'scan-status-txt busy';
-
-      try {
-        // Capture current frame
-        const ctx = captureCanvas.getContext('2d');
-        captureCanvas.width  = scanVideo.videoWidth;
-        captureCanvas.height = scanVideo.videoHeight;
-        ctx.drawImage(scanVideo, 0, 0);
-
-        // OCR
-        const result = await Tesseract.recognize(captureCanvas, 'por+eng', {
-          logger: m => {
-            if (m.status==='recognizing text' && typeof m.progress==='number')
-              scanStatus.textContent = `OCR: ${Math.round(m.progress*100)}%`;
-          }
-        });
-
-        const rawText = String(result?.data?.text||'').trim();
-
-        // Always display extracted text
-        if (rawText) {
-          ocrTxt.textContent = rawText;
-          ocrBox.classList.add('show');
-        }
-
-        const code = extractCode(rawText);
-
-        if (code) {
-          codeInput.value = code;
-          closeScanner();
-          toast(`Código lido: ${code}`, 'success');
-          verify(code);
-        } else if (rawText) {
-          // No code found — show text, let user pick manually
-          // Put the most promising line into the input
-          const best = rawText.split('\n').map(l=>l.trim()).filter(l=>l.length>3).sort((a,b)=>b.length-a.length)[0]||'';
-          codeInput.value = best.toUpperCase().slice(0,30);
-          closeScanner();
-          toast('Texto reconhecido. Confirme o código manualmente.','info');
-        } else {
-          scanStatus.textContent = 'Sem texto reconhecido. Tente novamente.';
-          toast('Sem texto detectado. Tente com mais luz.','error');
-          state.ocr = false;
-          captureBtn.disabled = false;
-          captureBtn.innerHTML = '📸 &nbsp;Fotografar e Ler Texto';
-        }
-      } catch(err) {
-        console.error(err);
-        scanStatus.textContent = 'Erro no OCR.';
-        toast(`Erro OCR: ${err.message||err}`, 'error');
-        state.ocr = false;
-        captureBtn.disabled = false;
-        captureBtn.innerHTML = '📸 &nbsp;Fotografar e Ler Texto';
+      if (!state.stream) {
+        toast('Câmara não disponível.','error');
+        return;
       }
+      scanStatus.textContent = 'A procurar QR no enquadramento...';
+      scanStatus.className = 'scan-status-txt busy';
+      state.scanCooldown = false;
+      detectQRCode();
+      setTimeout(() => {
+        if (state.scanning && !state.scanCooldown) {
+          scanStatus.textContent = 'QR não encontrado. Ajuste distância/luz e tente novamente.';
+          scanStatus.className = 'scan-status-txt';
+        }
+      }, 1400);
     }
 
     openScanBtn.addEventListener('click', openScanner);
