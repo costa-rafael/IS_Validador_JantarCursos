@@ -78,6 +78,8 @@ Também suporta autoload por query string:
 - `?db=https://.../ficheiro.xlsx`
 - `?r2key=Bilhetes.xlsx`
 
+## Executar localmente
+
 ## Nota
 
 O acesso à app em produção pode ser protegido por **Cloudflare Zero Trust Access**; o passo local de nome do validador serve para auditoria operacional dentro da app.
