@@ -59,12 +59,12 @@ async function handleGetR2Validations(request, env, url) {
   const validationKey = getValidationObjectKey(key, env);
   const obj = await env.DB_BUCKET.get(validationKey);
   if (!obj) {
-    return json({ key, validationKey, items: [] }, 200);
+    return json({ key, validationKey, updatedAt: '', items: [] }, 200);
   }
 
   const data = await obj.json().catch(() => ({ items: [] }));
   const items = Array.isArray(data?.items) ? data.items : [];
-  return json({ key, validationKey, items }, 200);
+  return json({ key, validationKey, updatedAt: String(data?.updatedAt || ''), items }, 200);
 }
 
 async function handlePostR2Validation(request, env) {

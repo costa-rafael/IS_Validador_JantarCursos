@@ -73,8 +73,10 @@ Abrir:
   - campo de chave (ex: `Bilhetes.xlsx`)
   - botão “Carregar de R2”
 
+Também suporta autoload por query string:
+
 ## Nota
 
 O acesso à app em produção pode ser protegido por **Cloudflare Zero Trust Access**; o passo local de nome do validador serve para auditoria operacional dentro da app.
 
-Quando a fonte é R2/Worker, ao validar um bilhete a app persiste essa validação em R2 (objeto JSON de validações) e reaplica esses dados em carregamentos seguintes.
+Quando a fonte é R2/Worker, ao validar um bilhete a app persiste essa validação em R2 (objeto JSON de validações), reaplica esses dados no carregamento e faz sincronização periódica (live) sem refresh.

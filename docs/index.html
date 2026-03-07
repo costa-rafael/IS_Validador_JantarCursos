@@ -766,7 +766,10 @@
       authenticated: false,
       validatorName: '',
       r2Key: '',
-      sourceType: ''
+      sourceType: '',
+      r2SyncTimer: null,
+      r2SyncInFlight: false,
+      r2ValidationsVersion: ''
     };
 
     const $ = id => document.getElementById(id);
@@ -956,7 +959,10 @@
       state.loaded = ok;
       state.source = ok ? source : null;
       state.sourceType = ok ? String(source || '') : '';
-      if (!ok || state.sourceType !== 'r2') state.r2Key = '';
+      if (!ok || state.sourceType !== 'r2') {
+        state.r2Key = '';
+        stopR2LiveSync();
+      }
       dbBtn.className = `source-pill${ok ? ' ready' : ''}`;
       dbLabel.textContent = ok ? label : 'Sem BD';
     }
@@ -1134,7 +1140,8 @@
         state.r2Key = String(keyHeader || cleanKey || '').trim();
 
         await loadExcelArrayBuffer(data, `R2:${String(keyHeader).slice(0, 20)}`, 'r2');
-        await applyR2PersistedValidations();
+        await applyR2PersistedValidations({ silent: false });
+        startR2LiveSync();
       } catch (err) {
         console.error(err);
         toast(`Erro ao carregar de R2/Worker: ${err.message || err}`, 'error');
@@ -1144,29 +1151,77 @@
       }
     }
 
-    async function applyR2PersistedValidations() {
-      if (!state.r2Key) return;
+    async function applyR2PersistedValidations(options = {}) {
+      if (!state.r2Key || state.r2SyncInFlight) return;
+
+      const silent = Boolean(options?.silent);
+      state.r2SyncInFlight = true;
 
       try {
         const res = await fetch(`/api/r2-validations?key=${encodeURIComponent(state.r2Key)}`, { method: 'GET' });
         if (!res.ok) return;
         const payload = await res.json();
+
+        const incomingVersion = String(payload?.updatedAt || '');
+        if (incomingVersion && incomingVersion === state.r2ValidationsVersion) return;
+
         const items = Array.isArray(payload?.items) ? payload.items : [];
-        if (!items.length) return;
+        let changed = 0;
 
         items.forEach(item => {
           const row = state.map.get(norm(item?.bilhete || ''));
           if (!row) return;
-          if (item?.validadoEm && !norm(row['Validado em'])) row['Validado em'] = item.validadoEm;
-          if (item?.validador && !norm(row['Validador'])) row['Validador'] = item.validador;
+
+          const newTime = String(item?.validadoEm || '').trim();
+          const oldTime = String(row['Validado em'] || '').trim();
+
+          const shouldSetTime = newTime && (
+            !oldTime || parseValidationTime(newTime) < parseValidationTime(oldTime)
+          );
+
+          if (shouldSetTime) {
+            row['Validado em'] = newTime;
+            changed += 1;
+          }
+
+          if (item?.validador && (!row['Validador'] || shouldSetTime)) {
+            row['Validador'] = item.validador;
+          }
         });
 
-        ensureValidationOrder();
-        updateCounters();
-        toast(`Validações sincronizadas do R2: ${items.length}.`, 'info');
+        if (incomingVersion) state.r2ValidationsVersion = incomingVersion;
+
+        if (changed > 0) {
+          ensureValidationOrder();
+          updateCounters();
+
+          const currentCode = norm(codeInput.value);
+          const currentRow = state.map.get(currentCode);
+          if (currentRow) showResult('valid', { row: currentRow });
+
+          if (!silent) toast(`Validações sincronizadas do R2: ${changed} atualização(ões).`, 'info');
+        }
       } catch (err) {
         console.error(err);
+      } finally {
+        state.r2SyncInFlight = false;
       }
+    }
+
+    function stopR2LiveSync() {
+      if (state.r2SyncTimer) clearInterval(state.r2SyncTimer);
+      state.r2SyncTimer = null;
+      state.r2SyncInFlight = false;
+      state.r2ValidationsVersion = '';
+    }
+
+    function startR2LiveSync() {
+      stopR2LiveSync();
+      if (state.sourceType !== 'r2' || !state.r2Key) return;
+
+      state.r2SyncTimer = setInterval(() => {
+        applyR2PersistedValidations({ silent: true });
+      }, 4000);
     }
 
     async function persistValidationToR2(row) {
