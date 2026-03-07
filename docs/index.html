@@ -669,9 +669,24 @@
   <script>
     const expectedCols = [
       'Nome','Número de Telemóvel','Email','Curso','Ano','Pratos',
-      'Método de Pagamento','Hora','Pagamento','Confirmado por',
-      'Confirmado','Bilhete','Validado em'
+      'Método de Pagamento','Hora Pagamento','Confirmado por','Pagamento Confirmado',
+      'Bilhete','Validado em'
     ];
+
+    const COLUMN_ALIASES = {
+      'Nome': ['nome'],
+      'Número de Telemóvel': ['numerodetelemovel','numerodotelemovel','telemovel','telefone','contacto'],
+      'Email': ['email','e-mail'],
+      'Curso': ['curso'],
+      'Ano': ['ano'],
+      'Pratos': ['pratos','prato'],
+      'Método de Pagamento': ['metododepagamento','metodopagamento','metododepagto','metodopagto'],
+      'Hora Pagamento': ['horapagamento','hora','horadopagamento','horario'],
+      'Confirmado por': ['confirmadopor'],
+      'Pagamento Confirmado': ['pagamentoconfirmado','pagamento','confirmado'],
+      'Bilhete': ['bilhete','codigo','codigobilhete'],
+      'Validado em': ['validadoem','validacaoem']
+    };
 
     const state = {
       rows: [],
@@ -750,9 +765,53 @@
       }, 3200);
     }
 
+    function normalizeHeaderKey(key) {
+      return String(key || '')
+        .trim()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+    }
+
+    function maybeFixMojibake(value) {
+      const text = String(value || '');
+      let candidate = text
+        .replace(/Ã\s+/g, 'à ')
+        .replace(/Âº/g, 'º')
+        .replace(/Âª/g, 'ª');
+
+      if (!/[ÃÂâ€]/.test(candidate)) return candidate;
+      try {
+        const bytes = new Uint8Array(Array.from(candidate, ch => ch.charCodeAt(0) & 0xff));
+        const fixed = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+        const score = str => (str.match(/[ÃÂâ€�]/g) || []).length + (str.match(/�/g) || []).length;
+        candidate = score(fixed) < score(candidate) ? fixed : candidate;
+      } catch {
+        // noop
+      }
+      return candidate;
+    }
+
+    function cleanCell(value) {
+      if (typeof value !== 'string') return value;
+      return maybeFixMojibake(value)
+        .replace(/\s�\s/g, ' à ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
     function trimHeaders(row) {
       const out = {};
-      Object.keys(row || {}).forEach(k => out[String(k).trim()] = row[k]);
+      Object.entries(row || {}).forEach(([k, v]) => {
+        const rawKey = maybeFixMojibake(String(k || '')).trim();
+        const normalized = normalizeHeaderKey(rawKey);
+        const canonical = Object.keys(COLUMN_ALIASES).find(col => COLUMN_ALIASES[col].includes(normalized)) || rawKey;
+        out[canonical] = cleanCell(v);
+      });
+
+      // Garantir que colunas oficiais existem para evitar undefined em renderizações
+      expectedCols.forEach(col => { if (!(col in out)) out[col] = out[col] ?? ''; });
       return out;
     }
 
@@ -911,7 +970,7 @@
     }
 
     function payOk(row) {
-      const t = norm(`${row['Pagamento'] || ''} ${row['Confirmado'] || ''}`);
+      const t = norm(`${row['Pagamento Confirmado'] || ''} ${row['Pagamento'] || ''} ${row['Confirmado'] || ''}`);
       return ['SIM','PAGO','OK','TRUE','CONFIRMADO','YES'].some(f => t.includes(f));
     }
 
@@ -961,10 +1020,11 @@
           <div class="info"><small>Nome</small><b>${r['Nome'] || '-'}</b></div>
           <div class="info"><small>Curso · Ano</small><b>${r['Curso'] || '-'} · ${r['Ano'] || '-'}</b></div>
           <div class="info"><small>Pratos</small><b>${r['Pratos'] || '-'}</b></div>
-          <div class="info"><small>Pagamento</small><b>${r['Método de Pagamento'] || '-'}</b></div>
+          <div class="info"><small>Método de Pagamento</small><b>${r['Método de Pagamento'] || '-'}</b></div>
+          <div class="info"><small>Pagamento Confirmado</small><b>${r['Pagamento Confirmado'] || r['Pagamento'] || '-'}</b></div>
           <div class="info"><small>Email</small><b>${r['Email'] || '-'}</b></div>
           <div class="info"><small>Telemóvel</small><b>${r['Número de Telemóvel'] || '-'}</b></div>
-          <div class="info"><small>Hora</small><b>${r['Hora'] || '-'}</b></div>
+          <div class="info"><small>Hora Pagamento</small><b>${r['Hora Pagamento'] || r['Hora'] || '-'}</b></div>
           <div class="info"><small>Validado em</small><b>${r['Validado em'] || '—'}</b></div>
         </div>`;
     }
