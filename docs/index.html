@@ -793,12 +793,56 @@
       return candidate;
     }
 
-    function cleanCell(value) {
+    function excelSerialToDate(serial) {
+      const num = Number(serial);
+      if (!Number.isFinite(num)) return null;
+      const ms = Math.round((num - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      if (Number.isNaN(d.getTime())) return null;
+      return d;
+    }
+
+    function formatPtDateTime(date, onlyTime = false) {
+      if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+      const two = n => String(n).padStart(2, '0');
+      const hh = two(date.getHours());
+      const mm = two(date.getMinutes());
+      const ss = two(date.getSeconds());
+      if (onlyTime) return `${hh}:${mm}:${ss}`;
+      return `${two(date.getDate())}/${two(date.getMonth() + 1)}/${date.getFullYear()}, ${hh}:${mm}:${ss}`;
+    }
+
+    function normalizeCellByColumn(value, column) {
+      if (value == null) return '';
+
+      if (typeof value === 'number') {
+        if (column === 'Hora Pagamento') {
+          const d = excelSerialToDate(value);
+          return d ? formatPtDateTime(d, true) : String(value);
+        }
+        if (column === 'Validado em') {
+          const d = excelSerialToDate(value);
+          return d ? formatPtDateTime(d, false) : String(value);
+        }
+        return value;
+      }
+
       if (typeof value !== 'string') return value;
-      return maybeFixMojibake(value)
+
+      const txt = maybeFixMojibake(value)
         .replace(/\s�\s/g, ' à ')
         .replace(/\s+/g, ' ')
         .trim();
+
+      if (column === 'Hora Pagamento' || column === 'Validado em') {
+        const numeric = Number(txt.replace(',', '.'));
+        if (Number.isFinite(numeric) && numeric > 1000) {
+          const d = excelSerialToDate(numeric);
+          if (d) return formatPtDateTime(d, column === 'Hora Pagamento');
+        }
+      }
+
+      return txt;
     }
 
     function trimHeaders(row) {
@@ -807,7 +851,7 @@
         const rawKey = maybeFixMojibake(String(k || '')).trim();
         const normalized = normalizeHeaderKey(rawKey);
         const canonical = Object.keys(COLUMN_ALIASES).find(col => COLUMN_ALIASES[col].includes(normalized)) || rawKey;
-        out[canonical] = cleanCell(v);
+        out[canonical] = normalizeCellByColumn(v, canonical);
       });
 
       // Garantir que colunas oficiais existem para evitar undefined em renderizações
