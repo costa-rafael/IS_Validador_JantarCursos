@@ -191,17 +191,6 @@
       position: relative;
     }
     .stat-btn:hover { border-color: rgba(94,162,255,.6); transform: translateY(-1px); }
-    .stat-btn::after {
-      content: 'Ver lista';
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      font-size: .54rem;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: #93c5fd;
-      opacity: .75;
-    }
 
     .input-wrap { position: relative; }
 
@@ -559,6 +548,116 @@
       letter-spacing: .07em;
       text-transform: uppercase;
       white-space: nowrap;
+    }
+
+    @media (max-width: 600px) {
+      .app {
+        padding: calc(10px + var(--safe-t)) 10px calc(16px + var(--safe-b));
+        gap: 10px;
+      }
+
+      .topbar {
+        padding: 8px;
+      }
+
+      .brand strong {
+        font-size: 1.02rem;
+      }
+
+      .source-pill {
+        padding: 7px 10px;
+        font-size: .66rem;
+      }
+
+      .hero {
+        padding: 10px;
+        gap: 8px;
+      }
+
+      .hero h1 {
+        font-size: .9rem;
+      }
+
+      .hero p {
+        font-size: .74rem;
+      }
+
+      .chip {
+        font-size: .58rem;
+        padding: 6px 8px;
+      }
+
+      .panel {
+        padding: 10px;
+      }
+
+      .panel-title {
+        font-size: .74rem;
+        margin-bottom: 8px;
+      }
+
+      .stats {
+        gap: 6px;
+      }
+
+      .stat {
+        padding: 8px 6px;
+      }
+
+      .stat b {
+        font-size: 1.18rem;
+      }
+
+      .stat span {
+        font-size: .53rem;
+      }
+
+      input[type="text"],
+      input[type="url"],
+      input[type="password"] {
+        padding: 12px 42px 12px 12px;
+        font-size: .88rem;
+      }
+
+      .actions {
+        grid-template-columns: 1fr 44px;
+        gap: 6px;
+      }
+
+      .btn {
+        height: 44px;
+        padding: 0 12px;
+        font-size: .72rem;
+      }
+
+      .btn.icon {
+        width: 44px;
+        font-size: 1rem;
+      }
+
+      .result-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .info b {
+        font-size: .76rem;
+      }
+
+      .sheet {
+        padding: 14px 12px calc(16px + var(--safe-b));
+      }
+
+      .v-list {
+        max-height: 32dvh;
+      }
+
+      .auth-card {
+        padding: 12px;
+      }
+
+      .auth-title {
+        font-size: .98rem;
+      }
     }
 
     @media (min-width: 920px) {
