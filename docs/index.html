@@ -185,6 +185,23 @@
 
     .stat b { font-size: 1.4rem; font-weight: 800; display: block; }
     .stat span { color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-size: .58rem; font-weight: 700; }
+    .stat-btn {
+      cursor: pointer;
+      transition: .18s;
+      position: relative;
+    }
+    .stat-btn:hover { border-color: rgba(94,162,255,.6); transform: translateY(-1px); }
+    .stat-btn::after {
+      content: 'Ver lista';
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      font-size: .54rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #93c5fd;
+      opacity: .75;
+    }
 
     .input-wrap { position: relative; }
 
@@ -407,6 +424,71 @@
       gap: 8px;
     }
 
+    #validationSheet {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 95;
+      background: rgba(0,0,0,.62);
+      align-items: flex-end;
+      backdrop-filter: blur(5px);
+    }
+    #validationSheet.active { display: flex; }
+
+    .v-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    .v-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: rgba(17,23,42,.96);
+      padding: 10px;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+    }
+    .v-card h4 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: .82rem;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 8px;
+    }
+    .v-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow: auto;
+      max-height: 42dvh;
+      padding-right: 2px;
+    }
+    .v-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(15,22,40,.95);
+      padding: 8px 10px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px;
+      align-items: start;
+    }
+    .v-rank {
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      background: rgba(59,130,246,.22);
+      color: #bfdbfe;
+      display: grid;
+      place-items: center;
+      font-size: .65rem;
+      font-weight: 800;
+      margin-top: 1px;
+    }
+    .v-main b { font-size: .8rem; }
+    .v-main small { display: block; color: var(--muted); margin-top: 2px; font-size: .68rem; }
+    .v-empty { color: var(--muted); font-size: .78rem; padding: 8px 2px; }
+
     .toast-wrap {
       position: fixed;
       top: calc(10px + var(--safe-t));
@@ -500,6 +582,33 @@
     </div>
   </div>
 
+  <div id="validationSheet">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h3>Estado das validações</h3>
+        <p>Ordem de entrada dos validados e lista de quem ainda falta validar.</p>
+      </div>
+
+      <div class="v-grid">
+        <div class="v-card">
+          <h4><span><i class="bi bi-check2-circle"></i> Já validados</span><span id="vDoneCount">0</span></h4>
+          <ul id="validatedList" class="v-list"></ul>
+          <div id="validatedEmpty" class="v-empty" hidden>Nenhum bilhete validado ainda.</div>
+        </div>
+
+        <div class="v-card">
+          <h4><span><i class="bi bi-hourglass-split"></i> Falta validar</span><span id="vPendingCount">0</span></h4>
+          <ul id="pendingList" class="v-list"></ul>
+          <div id="pendingEmpty" class="v-empty" hidden>Todos os bilhetes emitidos já foram validados.</div>
+        </div>
+      </div>
+
+      <div class="sheet-actions">
+        <button id="closeValidationSheetBtn" class="btn" type="button"><i class="bi bi-x-circle"></i> Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="app">
     <header class="topbar">
       <div class="brand">
@@ -527,7 +636,9 @@
         <div id="counterBar" class="stats" aria-live="polite">
           <div class="stat"><b id="cntTotal">0</b><span>Registos</span></div>
           <div class="stat"><b id="cntIssued">0</b><span>Bilhetes</span></div>
-          <div class="stat"><b id="cntValid">0</b><span>Validados</span></div>
+          <button id="openValidatedListBtn" class="stat stat-btn" type="button" aria-label="Ver lista de validados e por validar">
+            <b id="cntValid">0</b><span>Validados</span>
+          </button>
         </div>
 
         <div class="input-wrap" style="margin-top:10px;">
@@ -569,7 +680,8 @@
       source: null,
       stream: null,
       scanning: false,
-      scanRaf: null
+      scanRaf: null,
+      validationSeq: 0
     };
 
     const $ = id => document.getElementById(id);
@@ -582,11 +694,20 @@
     const captureCanvas = $('captureCanvas');
 
     const uploadSheet = $('uploadSheet');
+    const validationSheet = $('validationSheet');
     const excelInput = $('excelInput');
     const dropZone = $('dropZone');
     const onlineUrlInput = $('onlineUrlInput');
     const loadUrlBtn = $('loadUrlBtn');
     const closeSheetBtn = $('closeSheetBtn');
+    const openValidatedListBtn = $('openValidatedListBtn');
+    const closeValidationSheetBtn = $('closeValidationSheetBtn');
+    const validatedList = $('validatedList');
+    const pendingList = $('pendingList');
+    const vDoneCount = $('vDoneCount');
+    const vPendingCount = $('vPendingCount');
+    const validatedEmpty = $('validatedEmpty');
+    const pendingEmpty = $('pendingEmpty');
 
     const dbBtn = $('dbBtn');
     const dbLabel = $('dbLabel');
@@ -649,6 +770,74 @@
       counterBar.style.display = 'grid';
     }
 
+    function parseValidationTime(value) {
+      const text = String(value || '').trim();
+      if (!text) return Number.MAX_SAFE_INTEGER;
+      const iso = Date.parse(text);
+      if (!Number.isNaN(iso)) return iso;
+      const m = text.match(/(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2}):(\d{2})(?::(\d{2}))?/);
+      if (m) {
+        const [,dd,MM,yyyy,hh,mm,ss='00'] = m;
+        return Date.UTC(+yyyy, +MM - 1, +dd, +hh, +mm, +ss);
+      }
+      return Number.MAX_SAFE_INTEGER;
+    }
+
+    function rowTitle(row) {
+      return row['Nome'] || row['Email'] || row['Número de Telemóvel'] || 'Sem identificação';
+    }
+
+    function ensureValidationOrder() {
+      const existing = state.rows
+        .filter(r => norm(r['Validado em'] || '') !== '')
+        .sort((a, b) => parseValidationTime(a['Validado em']) - parseValidationTime(b['Validado em']));
+      existing.forEach((r, i) => {
+        if (!Number.isFinite(r.__validatedOrder)) r.__validatedOrder = i + 1;
+      });
+      state.validationSeq = existing.reduce((m, r) => Math.max(m, Number(r.__validatedOrder) || 0), 0);
+    }
+
+    function renderValidationLists() {
+      if (!state.loaded) {
+        toast('Carregue uma base de dados primeiro.', 'error');
+        return;
+      }
+
+      const validated = state.rows
+        .filter(r => norm(r['Bilhete']) !== '' && norm(r['Validado em'] || '') !== '')
+        .sort((a, b) => (a.__validatedOrder || 999999) - (b.__validatedOrder || 999999) || parseValidationTime(a['Validado em']) - parseValidationTime(b['Validado em']));
+
+      const pending = state.rows
+        .filter(r => norm(r['Bilhete']) !== '' && norm(r['Validado em'] || '') === '');
+
+      vDoneCount.textContent = String(validated.length);
+      vPendingCount.textContent = String(pending.length);
+
+      validatedList.innerHTML = validated.map((r, i) => `
+        <li class="v-item">
+          <span class="v-rank">${i + 1}</span>
+          <div class="v-main">
+            <b>${rowTitle(r)}</b>
+            <small>${r['Bilhete'] || '—'} · ${r['Validado em'] || '—'}</small>
+          </div>
+        </li>`).join('');
+
+      pendingList.innerHTML = pending.map(r => `
+        <li class="v-item">
+          <span class="v-rank"><i class="bi bi-hourglass-split"></i></span>
+          <div class="v-main">
+            <b>${rowTitle(r)}</b>
+            <small>${r['Bilhete'] || '—'} · ${r['Curso'] || 'Curso n/d'} ${r['Ano'] ? '· ' + r['Ano'] + 'º ano' : ''}</small>
+          </div>
+        </li>`).join('');
+
+      validatedEmpty.hidden = validated.length !== 0;
+      pendingEmpty.hidden = pending.length !== 0;
+      validationSheet.classList.add('active');
+    }
+
+    function closeValidationSheet() { validationSheet.classList.remove('active'); }
+
     function processRows(rows, sourceLabel, sourceType) {
       state.rows = rows;
       state.map = new Map();
@@ -663,6 +852,7 @@
         toast(`Colunas em falta: ${missing.slice(0,3).join(', ')}${missing.length > 3 ? '…' : ''}`, 'error');
       }
 
+      ensureValidationOrder();
       setDb(true, sourceLabel, sourceType);
       updateCounters();
       toast(`${rows.length} registos carregados (${sourceType === 'online' ? 'online' : 'local'}).`, 'success');
@@ -801,8 +991,24 @@
         toast('Registo sem bilhete emitido.', 'error');
         return;
       }
+
+      const alreadyValidated = norm(row['Validado em'] || '') !== '';
+      if (!alreadyValidated) {
+        row['Validado em'] = new Date().toLocaleString('pt-PT', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        });
+        row.__validatedOrder = ++state.validationSeq;
+        updateCounters();
+      }
+
       showResult('valid', { row });
-      toast('Bilhete válido.', 'success');
+      toast(alreadyValidated ? 'Bilhete já tinha sido validado.' : 'Bilhete válido e marcado como validado.', 'success');
     }
 
     function handleQrValue(rawValue) {
@@ -936,8 +1142,11 @@
     function closeSheet() { uploadSheet.classList.remove('active'); }
 
     uploadSheet.addEventListener('click', e => { if (e.target === uploadSheet) closeSheet(); });
+    validationSheet.addEventListener('click', e => { if (e.target === validationSheet) closeValidationSheet(); });
     dbBtn.addEventListener('click', openSheet);
     closeSheetBtn.addEventListener('click', closeSheet);
+    openValidatedListBtn.addEventListener('click', renderValidationLists);
+    closeValidationSheetBtn.addEventListener('click', closeValidationSheet);
 
     dropZone.addEventListener('click', () => excelInput.click());
     dropZone.addEventListener('keydown', e => {
