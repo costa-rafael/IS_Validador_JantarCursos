@@ -520,6 +520,47 @@
     .toast.error i { color: var(--bad); }
     .toast.info i { color: var(--brand); }
 
+
+    .auth-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: radial-gradient(80% 50% at 50% 0%, rgba(59,130,246,.24), transparent 70%), rgba(4,8,18,.9);
+      backdrop-filter: blur(8px);
+    }
+
+    .auth-card {
+      width: min(100%, 420px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(23,33,57,.95), rgba(17,23,42,.93));
+      padding: 16px;
+      box-shadow: 0 20px 40px rgba(0,0,0,.35);
+    }
+
+    .auth-title { font-size: 1.05rem; font-weight: 800; margin-bottom: 4px; }
+    .auth-sub { color: var(--muted); font-size: .8rem; margin-bottom: 12px; }
+    .auth-step { display: none; }
+    .auth-step.active { display: block; }
+    .auth-actions { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
+    .auth-error { margin-top: 8px; color: #fecaca; font-size: .74rem; min-height: 18px; }
+    .validator-pill {
+      font-size: .66rem;
+      border: 1px solid rgba(94,162,255,.45);
+      background: rgba(59,130,246,.12);
+      color: #bfdbfe;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
     @media (min-width: 920px) {
       .workspace { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
       .result-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -529,6 +570,18 @@
 </head>
 <body>
   <div class="bg-grid" aria-hidden="true"></div>
+
+  <div id="authScreen" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-step active">
+        <div class="auth-title">Nome do validador</div>
+        <p class="auth-sub">A autenticação de acesso é feita no Cloudflare Zero Trust. Indique apenas o nome do validador para registo na coluna <strong>Validador</strong>.</p>
+        <div class="input-wrap"><input id="validatorNameInput" type="text" placeholder="Ex: Rafael Costa" autocomplete="name"></div>
+        <div class="auth-actions"><button id="startSessionBtn" class="btn primary" type="button"><i class="bi bi-person-check"></i> Iniciar sessão</button></div>
+        <div id="authErrorValidator" class="auth-error"></div>
+      </div>
+    </div>
+  </div>
 
   <div id="scanOverlay">
     <video id="scanVideo" playsinline muted autoplay></video>
@@ -615,6 +668,7 @@
         <small>Jantar de Cursos</small>
         <strong>Validador de Bilhetes</strong>
       </div>
+      <span id="validatorPill" class="validator-pill" hidden>VALIDADOR · -</span>
       <button id="dbBtn" class="source-pill" type="button">
         <span class="source-dot"></span>
         <span id="dbLabel">Sem BD</span>
@@ -685,7 +739,8 @@
       'Confirmado por': ['confirmadopor'],
       'Pagamento Confirmado': ['pagamentoconfirmado','pagamento','confirmado'],
       'Bilhete': ['bilhete','codigo','codigobilhete'],
-      'Validado em': ['validadoem','validacaoem']
+      'Validado em': ['validadoem','validacaoem'],
+      'Validador': ['validador','validadopor']
     };
 
     const state = {
@@ -696,10 +751,17 @@
       stream: null,
       scanning: false,
       scanRaf: null,
-      validationSeq: 0
+      validationSeq: 0,
+      authenticated: false,
+      validatorName: ''
     };
 
     const $ = id => document.getElementById(id);
+
+    const authScreen = $('authScreen');
+    const validatorNameInput = $('validatorNameInput');
+    const startSessionBtn = $('startSessionBtn');
+    const authErrorValidator = $('authErrorValidator');
 
     const scanOverlay = $('scanOverlay');
     const scanVideo = $('scanVideo');
@@ -726,6 +788,7 @@
 
     const dbBtn = $('dbBtn');
     const dbLabel = $('dbLabel');
+    const validatorPill = $('validatorPill');
 
     const counterBar = $('counterBar');
     const cntTotal = $('cntTotal');
@@ -856,7 +919,22 @@
 
       // Garantir que colunas oficiais existem para evitar undefined em renderizações
       expectedCols.forEach(col => { if (!(col in out)) out[col] = out[col] ?? ''; });
+      if (!('Validador' in out)) out['Validador'] = '';
       return out;
+    }
+
+    function requireAuthAction() {
+      if (state.authenticated) return true;
+      authScreen.style.display = 'flex';
+      toast('Faça login para continuar.', 'error');
+      return false;
+    }
+
+    function setValidatorName(name) {
+      state.validatorName = String(name || '').trim();
+      validatorPill.hidden = !state.validatorName;
+      validatorPill.textContent = state.validatorName ? `VALIDADOR · ${state.validatorName}` : 'VALIDADOR · -';
+      if (state.validatorName) localStorage.setItem('validatorName', state.validatorName);
     }
 
     function setDb(ok, label = '', source = null) {
@@ -921,7 +999,7 @@
           <span class="v-rank">${i + 1}</span>
           <div class="v-main">
             <b>${rowTitle(r)}</b>
-            <small>${r['Bilhete'] || '—'} · ${r['Validado em'] || '—'}</small>
+            <small>${r['Bilhete'] || '—'} · ${r['Validado em'] || '—'}${r['Validador'] ? ' · ' + r['Validador'] : ''}</small>
           </div>
         </li>`).join('');
 
@@ -1070,10 +1148,12 @@
           <div class="info"><small>Telemóvel</small><b>${r['Número de Telemóvel'] || '-'}</b></div>
           <div class="info"><small>Hora Pagamento</small><b>${r['Hora Pagamento'] || r['Hora'] || '-'}</b></div>
           <div class="info"><small>Validado em</small><b>${r['Validado em'] || '—'}</b></div>
+          <div class="info"><small>Validador</small><b>${r['Validador'] || '-'}</b></div>
         </div>`;
     }
 
     function verify(raw) {
+      if (!requireAuthAction()) return;
       const code = norm(raw);
       if (!state.loaded) {
         showResult('error');
@@ -1108,6 +1188,7 @@
           hour12: false
         });
         row.__validatedOrder = ++state.validationSeq;
+        row['Validador'] = state.validatorName || row['Validador'] || '';
         updateCounters();
       }
 
@@ -1247,9 +1328,9 @@
 
     uploadSheet.addEventListener('click', e => { if (e.target === uploadSheet) closeSheet(); });
     validationSheet.addEventListener('click', e => { if (e.target === validationSheet) closeValidationSheet(); });
-    dbBtn.addEventListener('click', openSheet);
+    dbBtn.addEventListener('click', () => { if (!requireAuthAction()) return; openSheet(); });
     closeSheetBtn.addEventListener('click', closeSheet);
-    openValidatedListBtn.addEventListener('click', renderValidationLists);
+    openValidatedListBtn.addEventListener('click', () => { if (!requireAuthAction()) return; renderValidationLists(); });
     closeValidationSheetBtn.addEventListener('click', closeValidationSheet);
 
     dropZone.addEventListener('click', () => excelInput.click());
@@ -1294,15 +1375,38 @@
     });
 
     verifyBtn.addEventListener('click', () => verify(codeInput.value));
-    openScanBtn.addEventListener('click', openScanner);
+    openScanBtn.addEventListener('click', () => { if (!requireAuthAction()) return; openScanner(); });
     closeScanBtn.addEventListener('click', closeScanner);
     captureBtn.addEventListener('click', doCapture);
+
+    startSessionBtn.addEventListener('click', () => {
+      authErrorValidator.textContent = '';
+      const name = validatorNameInput.value.trim();
+      if (name.length < 2) {
+        authErrorValidator.textContent = 'Introduza o nome do validador.';
+        return;
+      }
+      state.authenticated = true;
+      setValidatorName(name);
+      authScreen.style.display = 'none';
+      toast(`Sessão iniciada por ${name}.`, 'success');
+    });
+
+    validatorNameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        startSessionBtn.click();
+      }
+    });
 
     (function boot() {
       const url = new URL(window.location.href);
       const queryDb = url.searchParams.get('db');
       const savedUrl = localStorage.getItem('dbOnlineUrl') || '';
       if (savedUrl) onlineUrlInput.value = savedUrl;
+
+      const savedValidator = localStorage.getItem('validatorName') || '';
+      if (savedValidator) validatorNameInput.value = savedValidator;
 
       if (queryDb) {
         onlineUrlInput.value = queryDb;
